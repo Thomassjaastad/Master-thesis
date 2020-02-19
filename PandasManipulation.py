@@ -38,8 +38,6 @@ df['Day'] = df['TimestampPosition'].dt.strftime('%d')
 df['VeloLongitude'] = df['SpeedOverGround']*np.sin(heading)
 df['VeloLatitude'] = df['SpeedOverGround']*np.cos(heading)
 
-#specify ship type i.e. tugboats, cargoships for a subset of the data
-df_subset = df[df['ShipType'].isin(['tugboats'])] 
 
 """----------------------------Create conditions on dataset------------------------------------"""
 
@@ -59,46 +57,41 @@ num_days = ['01', '02', '03', '04', '05', '06',
             '19', '20', '21', '22', '23', '24',
             '25', '26', '27', '28', '29', '30', '31']
 
-
-def CreateRouteNumber(df_sorted, year, month, day):
-    
-    # df must be a sorted dataframe. Sorted by date 
-
+def create_routes(df_sorted, years, months, days, IMONumbers):
+    ###############################################################
+    # Create routes from Timestamp column by checking time log    # 
+    # Parameters:                                                 #    
+    # sorted dataframe w.r.t Timestamp, number of years,          #    
+    # months and days in Timestamp data                           #   
+    # Returns:                                                    #     
+    # pandas.series with route numbers for each timestamp data    # 
+    ###############################################################
     route_numb = 0
     route_lst = []    
+    for IMOS in IMONumbers:
+        for year in years:
+            for month in months:
+                for day in days:
+                    routes = df_sorted.loc[(df_sorted['IMONumber'] == IMOS) &
+                               (df_sorted['Year'] == str(year)) & 
+                              (df_sorted['Month'] == month) & 
+                              (df_sorted['Day'] == day)]
 
-    for years in year:
-        for months in month:
-            for days in day:
-                routes = df_sorted.loc[(df_sorted['Year'] == str(years)) & 
-                          (df_sorted['Month'] == months) & 
-                          (df_sorted['Day'] == days)]
-                
-                if routes.empty == True:
-                    continue
-                else:
-                    # create column ['Route'] in routes df_subset with route number
-                    route_numb += 1
-                    shpe = routes.shape
-                    route_numb_col = [route_numb]*shpe[0]
-                    routes['Route'] = route_numb_col
-                    route_lst.append(route_numb_col)
-                    #print(years, months, days, shpe[0])
+                    if routes.empty == True:
+                        continue
+                    else:
+                        # create column ['Route'] in routes df_subset with route number
+                        route_numb += 1
+                        shpe = routes.shape
+                        route_numb_col = [route_numb]*shpe[0]
+                        routes['Route'] = route_numb_col
+                        route_lst.append(route_numb_col)
+                        #print(year, months, days, shpe[0])
 
         mergedRoutes = list(itertools.chain.from_iterable(route_lst))
     return mergedRoutes 
 
-
-# sort values by date, needed for CreateRouteNumber func. Must be sorted 
-df_subset['TimestampPosition'] = pd.to_datetime(df_subset['TimestampPosition'])
-df_subsetsorted = df_subset.sort_values(by='TimestampPosition')
-df_subsetsorted['Route'] = CreateRouteNumber(df_subsetsorted, num_years, num_mnths, num_days)
-
-trond_lat = [63.43049]
-trond_lon = [10.39506]
-
-
-def CalcDistAbs(TrondLon, TrondLat, lon, lat):
+def calc_dist(TrondLon, TrondLat, lon, lat):
     ########################################################
     # Parameters:                                          #
     # lon, lat vals Trondheim and lon, lat array           #
@@ -117,12 +110,7 @@ def CalcDistAbs(TrondLon, TrondLat, lon, lat):
     DistArr = np.append(lonT, latT, axis = 1)
     #check = np.sqrt(lonT[0]**2 + latT[0]**2)
     Absolute_Dist = np.linalg.norm(DistArr, axis = 1)
-    if Absolute_Dist[0] > Absolute_Dist[-1]:    
-        print(Absolute_Dist[-1])
-        return True
-    else:
-        #print('Travelling from Trondheim')
-        return False
+    return Absolute_Dist[0], Absolute_Dist[-1]
 
 
 
@@ -146,7 +134,7 @@ lon_bins_2d, lat_bins_2d = np.meshgrid(lon_bins, lat_bins)
 """-------------------------------------------Creating map class-----------------------------------------"""
     
 
-fig,ax=plt.subplots(figsize=(15,15))
+fig,ax=plt.subplots(figsize=(15,30))
 m = Basemap(llcrnrlon=minlon, llcrnrlat=minlat, urcrnrlon=maxlon, urcrnrlat=maxlat,
             resolution='i', projection='cyl',lat_0=lat0, lon_0=lon0,lat_ts=lat1)
 
@@ -157,7 +145,6 @@ m = Basemap(llcrnrlon=minlon, llcrnrlat=minlat, urcrnrlon=maxlon, urcrnrlat=maxl
 #
 #plt.pcolormesh(xs, ys, density)
 #plt.colorbar(orientation='vertical', label='Boat density')
-
 
 # labels = [left,right,top,bottom]
 m.drawparallels(lat_bins, labels=[False,True,True,False])
@@ -170,6 +157,8 @@ m.drawmapboundary(fill_color='white')
 m.fillcontinents(color='lightgrey', lake_color='white')  
 
 # Trondheim coords lat = y, lon = x
+trond_lat = [63.43049]
+trond_lon = [10.39506]
 
 #xTo, yTo = m(lon(ToTrond), lat[ToTrond])
 trond_x, trond_y = m(trond_lon, trond_lat)
@@ -183,19 +172,33 @@ for label, xpt, ypt in zip(labels, trond_x, trond_y):
 # Find travel direction, start indexing from 1
 cmap = mpl.cm.autumn
 
-for i in range(df_subsetsorted['Route'].max()):
-    route = df_subsetsorted.loc[(df_subsetsorted['Route']) == i + 1, 
-                            ['Heading', 'Longitude', 'Latitude', 'VeloLongitude', 'VeloLatitude', 'TimestampPosition', 'Route']]
-    dist = CalcDistAbs(trond_lon, trond_lat, 
-                    route.iloc[:, 1], route.iloc[:, 2]) 
-    if dist == True:
-        # create vector field of all boats travelling to Trondheim
-        if route['Route'].iloc[0] == 4:
-            print(route)
-            x, y = m(route.iloc[:, 1], route.iloc[:, 2])   
-            u, v = m(route.iloc[:, 3], route.iloc[:, 4])
-            m.quiver(x, y, u, v, color=cmap(i / df_subsetsorted['Route'].max()), label='Route %d' % (route['Route'].iloc[0]))
+# minimun distance to Trondheim
+eps = 0.1
 
+# specify ship type i.e. tugboats, cargoships, passenger_ships, other, high_speed_crafts, tankships for a subset of the data
+df_subset = df[df['ShipType'].isin(['tugboats'])] 
+
+# sort values by date: TimestampPosition. Must be sorted 
+df_subset['TimestampPosition'] = pd.to_datetime(df_subset['TimestampPosition'])
+df_subsetsorted = df_subset.sort_values(by='TimestampPosition')
+IMOS = df_subsetsorted['IMONumber'].drop_duplicates() 
+df_subsetsorted['Route'] = create_routes(df_subsetsorted, num_years, num_mnths, num_days, IMOS)
+
+for i in range(df_subsetsorted['Route'].max()):
+    route_info = df_subsetsorted.loc[(df_subsetsorted['Route']) == i + 1, 
+            ['IMONumber', 'Heading', 'Longitude', 'Latitude', 'VeloLongitude', 'VeloLatitude', 'TimestampPosition', 'Route']]
+    #print(route_info.head())
+    start_to = calc_dist(trond_lon, trond_lat, route_info.iloc[:, 2], route_info.iloc[:, 3])[0]
+    end_to = calc_dist(trond_lon, trond_lat, route_info.iloc[:, 2], route_info.iloc[:, 3])[1]
+
+    if start_to > end_to and end_to < eps:
+        # travelling to Trondheim
+        print("final distance of route_info %d is: %.3f with data points %s"  % (i+1, end_to, route_info['Route'].shape))
+        Q = m.quiver(route_info.iloc[:, 2], route_info.iloc[:, 3], 
+                     route_info.iloc[:, 4], route_info.iloc[:, 5], 
+                     color=cmap(i / df_subsetsorted['Route'].max()), 
+                     label='Route %d' % (route_info['Route'].iloc[0]))
+            
 plt.xlabel('Longitude',fontsize=16)
 plt.ylabel('Latitude',fontsize=16)
 plt.legend()
