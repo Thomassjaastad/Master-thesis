@@ -7,6 +7,7 @@ Representation of flows are:
 
 Methods:
 --------
+Potential  Physical representation
 sink    -> end point/destination 
 source  -> starting point 
 dipol   -> objects in vicinity
@@ -21,7 +22,7 @@ class VelocityPotential():
     #---------------------- errors: ----------------------------
     #-----------------------------------------------------------
     # 1. Problem in areas where equations are divided by zero 
-    # 2. How to calculate strengths for a producing a good model
+    # 2. How to calculate strengths for a producing a good model -> source panel method
     #-----------------------------------------------------------
 
     def __init__(self, flow_strength, x0, y0):
@@ -65,15 +66,3 @@ class VelocityPotential():
         u_dipol = self.flow_strength*((y - self.y0)**2 - (x - self.x0)**2)/((x - self.x0)**2 + (y - self.y0)**2)**2 
         v_dipol = -(2*self.flow_strength*(y - self.y0)*(x - self.x0))/((x - self.x0)**2 + (y - self.y0)**2)**2 
         return u_dipol, v_dipol
-
-
-    #Not used yet
-    def superposition(u, v):
-        """
-        u and v are vectors 
-        finialize environment by adding velocity components/superposition principle 
-        returns final u, v to be plotted 
-        """
-        u_tot = np.sum(u, axis=0)
-        v_tot = np.sum(v, axis=0)
-        return u_tot, v_tot

@@ -1,13 +1,12 @@
 import pandas as pd
-import geopandas as gpd
+#import geopandas as gpd
 import numpy as np 
 import datetime
 import matplotlib.pyplot as plt
 import matplotlib as mpl
 from mpl_toolkits.basemap import Basemap
-import Grid  
+#import Grid  
 import itertools      
-
 
 """
 open csv file and use TimestampPosition column to make new columns. This may come in handy when wanting to get out certain data.
@@ -15,7 +14,7 @@ Seems as though the data and routes are structured in a timeseries. Try to extra
 """
 
 # create dataframe
-df = pd.read_csv('AISData/aisToTrondheim.csv')
+df = pd.read_csv('aisToTrondheim.csv')
 #df = df.set_index('TimestampPosition')
 df['TimestampPosition'] = pd.to_datetime(df['TimestampPosition'])
 
