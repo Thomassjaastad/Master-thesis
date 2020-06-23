@@ -1,6 +1,8 @@
 import numpy as np
 
 # Function for computing geometric integrals for normal and tangential velcity components
+
+
 #TODO:
 # Check if angles are computed correctly. Not using beta in program. Is necessary?
 
@@ -29,7 +31,7 @@ def solveGeometricIntegrals(xc, yc, S, phi, beta, XB, YB):
     n_panels = len(xc)
     I = np.zeros((n_panels, n_panels))
     J = np.zeros((n_panels, n_panels))
-    eps = 1e-10
+    eps = 1e-3
     # normal and tangential velocity calculation at control point i and panel i
     for i in range(n_panels):
         for j in range(n_panels):
@@ -39,15 +41,14 @@ def solveGeometricIntegrals(xc, yc, S, phi, beta, XB, YB):
 
                 B = (XB[j]*np.cos(phi[j]) + YB[j]*np.sin(phi[j])
                     - xc[i]*np.cos(phi[j]) - yc[i]*np.sin(phi[j]))
-
+                #print('B = ',B)
                 C = (xc[i] - XB[j])**2 + (yc[i] - YB[j])**2
-
+                #print('C = ', C)
                 Dn = (XB[j] - xc[i])*np.sin(phi[i]) + (yc[i] - YB[j])*np.cos(phi[i])
                 Dt = (xc[i] - XB[j])*np.cos(phi[i]) + (yc[i] - YB[j])*np.sin(phi[i])
                 arg = C - B**2
-                if arg < 0:
-                    print('negativ number')
-                E = np.sqrt(arg, dtype=np.float64) + eps 
+
+                E = np.sqrt(arg) + eps 
                 if E == 0.0:
                     print('E is 0')
                 
