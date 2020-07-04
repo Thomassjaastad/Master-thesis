@@ -43,6 +43,5 @@ def solvePointGeometry(XP, YP, S, phi, XB, YB):
         
         Yterm1 = -0.5*Ay*np.log((S[j]**2 + 2*S[j]*B + C)/C)
         Yterm2 = (Dy+Ay*B)/E*(np.arctan2((S[j] + B), E) - np.arctan2(B, E))
-        Y[j] = Yterm1 + Yterm2    
-         
+        Y[j] = Yterm1 + Yterm2        
     return X, Y

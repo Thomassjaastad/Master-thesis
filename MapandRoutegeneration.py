@@ -9,9 +9,6 @@ import Flow
 import find_land
 import sys
 
-
-
-
 np.set_printoptions(threshold=sys.maxsize)
 
 df = pd.read_csv('Routing/aisToTrondheim.csv', index_col = 'TimestampPosition', parse_dates = True)
@@ -42,7 +39,8 @@ for i in range(unique_dates.shape[0]):
     route = df_subset.loc[str(unique_dates[i])]
     last_dist = route['DistTrondheim'][-1]
     first_dist = route['DistTrondheim'][0]
-
+    df_subset.loc[route.index, 'Route number'] = i
+    #df_subset.loc[i, 'route number']
     if last_dist < first_dist:
         df_subset.loc[route.index, 'Direction'] = 'To'  
         count = 0
@@ -65,13 +63,19 @@ for i in range(unique_dates.shape[0]):
         df_subset.loc[route.index, 'Direction'] = 'From'
 
 df_ToTrondheim = df_subset.loc[df_subset['Direction'] == 'To', 
-                              ['Longitude', 'Latitude', 'VelocityLongitude', 'VelocityLatitude', 'DistTrondheim']]
+                              ['Longitude', 'Latitude', 'VelocityLongitude', 'VelocityLatitude', 'DistTrondheim', 'Route number']]
+
+
+# single route from tugboat df
+#df_route = df_ToTrondheim.loc[df_ToTrondheim['Route number'] == 2.0, 
+#                                         ['Longitude', 'Latitude', 'VelocityLongitude', 'VelocityLatitude', 'DistTrondheim', 'Route number']]
 
 # grid boundaries
-minlon = max(-180, min(df['Longitude']))
-minlat = max(-90, min(df['Latitude']))
-maxlon = min(180, max(df['Longitude']))
-maxlat = min(90, max(df['Latitude']))
+minlon = max(-180, min(df_ToTrondheim['Longitude']))
+minlat = max(-90, min(df_ToTrondheim['Latitude']))
+maxlon = min(180, max(df_ToTrondheim['Longitude']))
+maxlat = min(90, max(df_ToTrondheim['Latitude']))
+
 nx, ny = 3, 3
 
 lat0 = (maxlat + minlat)/2 
@@ -84,22 +88,29 @@ fig, ax = plt.subplots(figsize = (30, 30))
 
 # insert area threshold for more detailed map plot
 eps = 0.01
-m = Basemap(llcrnrlon = minlon + eps, llcrnrlat = minlat + eps, urcrnrlon = maxlon , urcrnrlat = maxlat,
-            resolution = 'i', projection = 'cyl', lat_0 = lat0, lon_0 = lon0)
+
+# create map instance
+m = Basemap(llcrnrlon = minlon, llcrnrlat = minlat, urcrnrlon = maxlon , urcrnrlat = maxlat,
+            resolution = 'f', projection = 'cyl', lat_0 = lat0, lon_0 = lon0)
 
 # formatting plot
-m.drawmapboundary(fill_color = 'white')
-m.fillcontinents(color = 'lightgrey', lake_color = 'white', zorder=1)  
+#m.drawmapboundary(fill_color = 'lightblue')
+#m.fillcontinents(color = 'brown', lake_color = 'lightblue', zorder=1)  
 
+m.arcgisimage(service='ESRI_Imagery_World_2D', xpixels = 2000, verbose= True)
 # coastline and panels values XB and YB
+"""
 coast = m.drawcoastlines()
 coordinates = coast.get_segments() 
+
+# maybe change coordinate orientation?!?!
 coordinates = np.vstack(coordinates)
 
 # tweakable parameters!
 Vinf = 1
-AoA = np.radians(0)
+AoA = np.arctan((trond_lat -  df_ToTrondheim['Latitude'][0])/(trond_lon - df_ToTrondheim['Longitude'][0]))
 
+# boundary points
 XB = coordinates[:, 0]
 YB = coordinates[:, 1]
 
@@ -108,16 +119,10 @@ roll_idx = XB.size - 255
 XB = np.roll(XB, roll_idx)
 YB = np.roll(YB, roll_idx)
 
-# creating boundaries for fluid flow 
-#XB = np.insert(XB, 0, minlon)
-#YB = np.insert(YB, 0, maxlat)
-#XB = np.append(XB, minlon)
-#YB = np.append(YB, maxlat)
-
 XC, YC = FlowBoundary.control_points(XB, YB)
 
 #TODO:
-# Check delta angle. Not used in program! Necessary?
+# check delta angle. Not used in program! Necessary?
 panels, phi = FlowBoundary.panels(XB, YB)
 delta, beta = FlowBoundary.angles(phi, AoA)
 
@@ -125,6 +130,7 @@ I, J = sourcepanel.solveGeometricIntegrals(XC, YC, panels, phi, beta, XB, YB)
 np.fill_diagonal(I, np.pi)
 b = -2*np.pi*Vinf*np.cos(beta)
 lamda = np.linalg.solve(I, b)
+
 # grid for flow computations
 nxx, nyy = 30, 30
 
@@ -134,7 +140,7 @@ X, Y = np.meshgrid(x_flow, y_flow)
 
 # sink located at Trondheim
 lamda_trond = 3 # sink strength
-trond_flow = Flow.VelocityPotential(lamda_trond, trond_lon, trond_lat)
+trond_flow = Flow.Velocity(lamda_trond, trond_lon, trond_lat)
 vx_sink, vy_sink = trond_flow.sink(X, Y)
 
 # exclude land areas
@@ -143,17 +149,12 @@ land_vals = np.rot90(land_vals)
 sea_vals = 1 - land_vals 
 Y = np.flip(Y, axis = 0)
 
-# Trondheim
-trond_x, trond_y = m(trond_lon, trond_lat)
-labels = ['Trondheim']
 
 # XP and YP
 # TODO: Try to only calculate in for loops. minimize if checks and decrease computation time. 
 X_sea = X*sea_vals
 Y_sea = Y*sea_vals
 
-uni_x = trond_lon - x_flow
-uni_y = trond_lat - y_flow 
 vx = np.zeros((nxx, nyy))
 vy = np.zeros((nxx, nyy))
 
@@ -167,27 +168,31 @@ for i in range(nxx):
             vx[i, j] = 0 
             vy[i, j] = 0
         else:
-            vx[i, j] = Vinf*np.cos(AoA) + np.dot(lamda, XGeom.T)/(2*np.pi) + vx_sink[i, j] #+ uni_x[i] 
-            vy[i, j] = Vinf*np.sin(AoA) + np.dot(lamda, YGeom.T)/(2*np.pi) + vy_sink[i, j] #+ uni_y[j] 
-
+            vx[i, j] = Vinf*np.cos(AoA) + np.dot(lamda, XGeom.T)/(2*np.pi) + vx_sink[i, j]  
+            vy[i, j] = Vinf*np.sin(AoA) + np.dot(lamda, YGeom.T)/(2*np.pi) + vy_sink[i, j]  
+"""
 #m.quiver(df['Longitude'], df['Latitude'], 
-#         df['VelocityLongitude'], df['VelocityLatitude'], color = 'blue', scale = 1000)
+#         df['VelocityLongitude'], df['VelocityLatitude'], color = 'blue', scale = 2000, label = 'AIS-data')
 
-
+# all tug boats
 #m.quiver(df_subset['Longitude'], df_subset['Latitude'], 
-#         df_subset['VelocityLongitude'], df_subset['VelocityLatitude'])
+#         df_subset['VelocityLongitude'], df_subset['VelocityLatitude'], 
+#         scale=1200, color='C0', label = 'Tugboats')
 
-plt.xlabel('Longitude', fontsize = 18)
-plt.ylabel('Latitude', fontsize = 18)
+# single route
+#m.quiver(df_route['Longitude'], df_route['Latitude'],
+#         df_route['VelocityLongitude'], df_route['VelocityLatitude'])
 
 
-# plot ships    
-#m.quiver(df_ToTrondheim['Longitude'], df_ToTrondheim['Latitude'],
-#         df_ToTrondheim['VelocityLongitude'], df_ToTrondheim['VelocityLatitude'], scale=1000)
+# plot tugboats     
+m.quiver(df_ToTrondheim['Longitude'], df_ToTrondheim['Latitude'],
+         df_ToTrondheim['VelocityLongitude'], df_ToTrondheim['VelocityLatitude'], 
+         scale=800, color = 'C0', label='Tugboats')
 #[1: -1, 1: -1]
 
 # plot velocities
-m.quiver(X, Y, vx, vy, color = 'green', zorder = 3, scale = 100)
+#m.quiver(X[1: -1, 1: -1], Y[1: -1, 1: -1], vx[1: -1, 1: -1], vy[1: -1, 1: -1]
+#         , color = 'green', zorder = 3, scale = 100, label = "Fluid velocity")
 
 # starting points for streamlines 
 # plt function not good at plotting points 
@@ -198,12 +203,19 @@ m.quiver(X, Y, vx, vy, color = 'green', zorder = 3, scale = 100)
 #                   arrowstyle = '-')
 
 #  labels = [left,right,top,bottom]
-m.drawparallels(lat_bins, labels=[False,True,True,False])
-m.drawmeridians(lon_bins, labels=[True,False,True,False])
+m.drawparallels(lat_bins, labels = [False, True, True, False])
+m.drawmeridians(lon_bins, labels = [True, False, True, False])
 
-m.plot(trond_x, trond_y, color = 'black', marker = 's', markersize = 15)
+# Trondheim
+trond_x, trond_y = m(trond_lon, trond_lat)
+labels = ['Trondheim']
+
+m.plot(trond_x, trond_y, color = 'orange', marker = 's', markersize = 10)
 for label, xpt, ypt in zip(labels, trond_x, trond_y):
-    plt.text(xpt, ypt, label)
+    plt.text(xpt, ypt, label, color='orange')
 
+#plt.title("AIS-data in fjord of Trondheim", loc='left', fontsize= 16)
+plt.xlabel('Longitude', fontsize = 18)
+plt.ylabel('Latitude', fontsize = 18)
 plt.legend()
 plt.show()
