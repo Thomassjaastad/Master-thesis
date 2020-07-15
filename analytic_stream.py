@@ -92,7 +92,7 @@ y = np.linspace(minlat, maxlat, ny)
 X, Y = np.meshgrid(x, y)
 
 # Create flow types
-source_str = 40
+source_str = 400
 x_source = df_route['Longitude'][0]
 y_source = df_route['Latitude'][0]
 flow0 = Flow.Velocity(source_str, x_source, y_source)
@@ -104,22 +104,23 @@ y_sink = df_route['Latitude'][-1]
 flow1 = Flow.Velocity(sink_str, x_sink, y_sink)
 u_sink, v_sink = flow1.sink(X, Y)
 
-#doublet_str0 = 0.05
-#x_doublet0 = 10.8
-#y_doublet0 = 63.5
-#flow2 = Flow.Velocity(doublet_str0, x_doublet0, y_doublet0)
-#u_doublet0, v_doublet0 = flow2.doublet(X, Y)
-#
-#doublet_str1 = 0.02
-#x_doublet1 = 10.9
-#y_doublet1 = 63.77
-#flow3 = Flow.Velocity(doublet_str1, x_doublet1, y_doublet1)
-#u_doublet1, v_doublet1 = flow3.doublet(X, Y)
+# Trying to represent source as islands and not doublets 
+source_str0 = 1
+x_source0 = 9.6
+y_source0 = 63.7
+flow2 = Flow.Velocity(source_str0, x_source0, y_source0)
+u_source0, v_source0 = flow2.doublet(X, Y)
+
+source_str1 = 1
+x_source1 = 9.6
+y_source1 = 63.74
+flow3 = Flow.Velocity(source_str1, x_source1, y_source1)
+u_source1, v_source1 = flow3.source(X, Y)
 
 
 # Superposition
-u_tot = u_sink + u_source# + u_doublet0 + u_doublet1 
-v_tot = v_sink + v_source# + v_doublet0 + v_doublet1
+u_tot = u_sink + u_source + u_source1 + u_source0 #+ u_doublet1 
+v_tot = v_sink + v_source + v_source1 + v_source0 #+ v_doublet1
 
 #rad = 0.1
 #for i in range(nx):
@@ -135,11 +136,11 @@ v_tot = v_sink + v_source# + v_doublet0 + v_doublet1
 
 fig, ax = plt.subplots()
 
-stream = ax.streamplot(X, Y, u_tot, v_tot, linewidth = 0.5, density = 3, color = 'b', 
+stream = ax.streamplot(X, Y, u_tot, v_tot, linewidth = 0.5, density = 2, color = 'b', 
                    arrowstyle = '->')
 
-plt.quiver(df_route['Longitude'], df_route['Latitude'], 
-            df_route['VelocityLongitude'], df_route['VelocityLatitude'], scale = 400, label='AIS-data')
+#plt.quiver(df_route['Longitude'], df_route['Latitude'], 
+#            df_route['VelocityLongitude'], df_route['VelocityLatitude'], scale = 400, label='AIS-data')
 
 """------path coordinates------"""
 path = stream.lines.get_paths()
@@ -148,11 +149,11 @@ path = np.asarray(path)
 segment = stream.lines.get_segments()
 segment = np.asarray(segment)
 
-line_segments = LineCollection(segment[10:50], color = 'red', label='streamline route')
-ax.add_collection(line_segments)
+#line_segments = LineCollection(segment[10:50], color = 'red', label='streamline route')
+#ax.add_collection(line_segments)
 
-#plt.scatter(x_doublet1, y_doublet1, color = 'orange')
-#plt.scatter(x_doublet0, y_doublet0, color = 'orange')
+plt.scatter(x_source1, y_source1, color = 'orange')
+plt.scatter(x_source0, y_source0, color = 'orange')
 plt.scatter(x_sink, y_sink, color = 'purple', label = 'End')
 plt.scatter(x_source, y_source, color = 'green', label= 'Start')
 plt.title('Vessel motion and streamline', fontsize = 18)

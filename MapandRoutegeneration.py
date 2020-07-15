@@ -8,6 +8,8 @@ import FlowBoundary
 import Flow
 import find_land
 import sys
+import convert
+
 
 np.set_printoptions(threshold=sys.maxsize)
 
@@ -17,11 +19,17 @@ df = df.drop(columns=['dummy'])
 trond_lat = [63.43049]
 trond_lon = [10.39506]
 
+trond_x, trond_y = convert.WGS84(np.rad2deg(trond_lat))
+
+LonRad = np.deg2rad(df['Longitude'])
+LatRad = np.deg2rad(df['Latitude'])
+df['x'], df['y'] = convert.WGS84(LatRad)
+
 # add columns to df
 df['Heading'] = np.radians(df['Heading'])
 df['VelocityLongitude'] = df['SpeedOverGround']*np.sin(df['Heading'])
 df['VelocityLatitude'] = df['SpeedOverGround']*np.cos(df['Heading'])
-df['DistTrondheim'] = np.sqrt((df['Longitude'].values - trond_lon)**2 + (df['Latitude'].values - trond_lat)**2)
+df['DistTrondheim'] = np.sqrt((df['x'].values - trond_x)**2 + (df['y'].values - trond_y)**2)
 
 # extract subset of original df to analyze. Dataset to big to analyze all together
 df_subset = df[df['ShipType'].isin(['tugboats'])].copy()
@@ -29,6 +37,8 @@ df_subset = df[df['ShipType'].isin(['tugboats'])].copy()
 # get rid of hours, minutes and seconds in Timestamp col/idx
 date = df_subset.index.to_period('d')
 unique_dates = date.drop_duplicates()
+
+
 
 #route0 = df_subset.loc[str(unique_dates[0])]
 #route1 = df_subset.loc[str(unique_dates[1])]
@@ -78,6 +88,9 @@ maxlat = min(90, max(df_ToTrondheim['Latitude']))
 
 nx, ny = 3, 3
 
+minx, miny = convert.WGS84(np.deg2rad(minlat))
+maxx, maxy = convert.WGS84(np.deg2rad(maxlat))
+
 lat0 = (maxlat + minlat)/2 
 lon0 = (maxlon + minlon)/2
 lat1 = (maxlat + minlat)/2-20
@@ -91,15 +104,15 @@ eps = 0.01
 
 # create map instance
 m = Basemap(llcrnrlon = minlon, llcrnrlat = minlat, urcrnrlon = maxlon , urcrnrlat = maxlat,
-            resolution = 'f', projection = 'cyl', lat_0 = lat0, lon_0 = lon0)
+            resolution = 'i', projection = 'cyl', lat_0 = lat0, lon_0 = lon0)
 
 # formatting plot
 #m.drawmapboundary(fill_color = 'lightblue')
 #m.fillcontinents(color = 'brown', lake_color = 'lightblue', zorder=1)  
 
-m.arcgisimage(service='ESRI_Imagery_World_2D', xpixels = 2000, verbose= True)
+#m.arcgisimage(service='ESRI_Imagery_World_2D', xpixels = 2000, verbose= True)
 # coastline and panels values XB and YB
-"""
+
 coast = m.drawcoastlines()
 coordinates = coast.get_segments() 
 
@@ -108,12 +121,15 @@ coordinates = np.vstack(coordinates)
 
 # tweakable parameters!
 Vinf = 1
-AoA = np.arctan((trond_lat -  df_ToTrondheim['Latitude'][0])/(trond_lon - df_ToTrondheim['Longitude'][0]))
+AoA = 0 #np.arctan((trond_lat -  df_ToTrondheim['Latitude'][0])/(trond_lon - df_ToTrondheim['Longitude'][0]))
 
-# boundary points
+# boundary points in lon and lat degree values!
 XB = coordinates[:, 0]
 YB = coordinates[:, 1]
-
+#XB, YB = convert.WGS84(np.deg2rad(latB))
+plt.plot(XB,YB)
+plt.show()
+exit()
 # rolling values for non lines over sea area
 roll_idx = XB.size - 255
 XB = np.roll(XB, roll_idx)
@@ -126,14 +142,24 @@ XC, YC = FlowBoundary.control_points(XB, YB)
 panels, phi = FlowBoundary.panels(XB, YB)
 delta, beta = FlowBoundary.angles(phi, AoA)
 
+# solving system of equations
 I, J = sourcepanel.solveGeometricIntegrals(XC, YC, panels, phi, beta, XB, YB)
 np.fill_diagonal(I, np.pi)
 b = -2*np.pi*Vinf*np.cos(beta)
 lamda = np.linalg.solve(I, b)
 
 # grid for flow computations
-nxx, nyy = 30, 30
+nxx, nyy = 100, 100
 
+minx, miny = convert.WGS84(np.deg2rad(minlat))
+maxx, maxy = convert.WGS84(np.deg2rad(maxlat))
+
+# cart rep
+#x_flow = np.linspace(minx, maxx, nxx)
+#y_flow = np.linspace(miny, maxy, nyy)
+#X, Y = np.meshgrid(x_flow, y_flow)
+
+# lon and lat rep
 x_flow = np.linspace(minlon, maxlon, nxx)
 y_flow = np.linspace(minlat, maxlat, nyy)
 X, Y = np.meshgrid(x_flow, y_flow)
@@ -148,7 +174,6 @@ land_vals = find_land.arr(x_flow, y_flow, m)
 land_vals = np.rot90(land_vals)
 sea_vals = 1 - land_vals 
 Y = np.flip(Y, axis = 0)
-
 
 # XP and YP
 # TODO: Try to only calculate in for loops. minimize if checks and decrease computation time. 
@@ -170,7 +195,7 @@ for i in range(nxx):
         else:
             vx[i, j] = Vinf*np.cos(AoA) + np.dot(lamda, XGeom.T)/(2*np.pi) + vx_sink[i, j]  
             vy[i, j] = Vinf*np.sin(AoA) + np.dot(lamda, YGeom.T)/(2*np.pi) + vy_sink[i, j]  
-"""
+
 #m.quiver(df['Longitude'], df['Latitude'], 
 #         df['VelocityLongitude'], df['VelocityLatitude'], color = 'blue', scale = 2000, label = 'AIS-data')
 
@@ -185,10 +210,14 @@ for i in range(nxx):
 
 
 # plot tugboats     
-m.quiver(df_ToTrondheim['Longitude'], df_ToTrondheim['Latitude'],
-         df_ToTrondheim['VelocityLongitude'], df_ToTrondheim['VelocityLatitude'], 
-         scale=800, color = 'C0', label='Tugboats')
+#m.quiver(df_ToTrondheim['Longitude'], df_ToTrondheim['Latitude'],
+#         df_ToTrondheim['VelocityLongitude'], df_ToTrondheim['VelocityLatitude'], 
+#         scale=800, color = 'C0', label='Tugboats')
 #[1: -1, 1: -1]
+
+#plot velocities
+m.quiver(X[1: -1, 1: -1], Y[1: -1, 1: -1], vx[1: -1, 1: -1], vy[1: -1, 1: -1]
+         , color = 'green', zorder = 3, scale = 100, label = "Fluid velocity")
 
 # plot velocities
 #m.quiver(X[1: -1, 1: -1], Y[1: -1, 1: -1], vx[1: -1, 1: -1], vy[1: -1, 1: -1]
