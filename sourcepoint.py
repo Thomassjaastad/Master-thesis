@@ -40,8 +40,12 @@ def solvePointGeometry(XP, YP, S, phi, XB, YB):
         Xterm1 = -0.5*Ax*np.log((S[j]**2 + 2*S[j]*B + C)/C)
         Xterm2 = (Dx+Ax*B)/E*(np.arctan2((S[j] + B), E) - np.arctan2(B, E))
         X[j] = Xterm1 + Xterm2
-        
+        if np.isnan(X[j]) == True:
+            X[j] = 0
         Yterm1 = -0.5*Ay*np.log((S[j]**2 + 2*S[j]*B + C)/C)
         Yterm2 = (Dy+Ay*B)/E*(np.arctan2((S[j] + B), E) - np.arctan2(B, E))
         Y[j] = Yterm1 + Yterm2        
+        if np.isnan(Y[j]) == True:
+            Y[j] = 0
+        
     return X, Y
