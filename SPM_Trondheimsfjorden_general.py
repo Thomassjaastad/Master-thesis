@@ -9,7 +9,7 @@ import Flow
 import find_land
 import sys
 import convert
-from scipy import linalg
+#from scipy import linalg
 
 np.set_printoptions(threshold=sys.maxsize)
 
@@ -40,11 +40,12 @@ df['DistTrondheimCart'] = np.sqrt((df['x'].values - trond_x)**2 + (df['y'].value
 #df['DistTrondheimWGS'] = np.sqrt((df['Longitude'].values - trond_lon)**2 + (df['Latitude'].values - trond_lat)**2)
 df['DistTrondheimHaversine'] = convert.distsphere(df['Longitude'], trond_lon, df['Latitude'], trond_lat)
 
-#print(df['ShipType'].drop_duplicates())
+print('Ship types in data set:')
+print(df['ShipType'].drop_duplicates())
 
 
 # extract subset of original df to analyze. Dataset to big to analyze all together
-df_subset = df[df['ShipType'].isin(['cargo_ships'])].copy()
+df_subset = df[df['ShipType'].isin(['tugboats'])].copy()
 
 # get rid of hours, minutes and seconds in Timestamp col/idx
 date = df_subset.index.to_period('d')
@@ -92,9 +93,8 @@ unique_tugroutes =df_subset['Route number'].drop_duplicates()
 unique_routes = df_ToTrondheim['Route number'].drop_duplicates()
 print(unique_routes)
 
-df_route = df_ToTrondheim.loc[df_ToTrondheim['Route number'] == 39.0, 
+df_route = df_ToTrondheim.loc[df_ToTrondheim['Route number'] == 7.0, 
         ['Longitude', 'Latitude', 'VelocityLongitude', 'VelocityLatitude', 'DistTrondheimHaversine', 'Route number']]
-
 
 
 # grid boundaries
@@ -129,7 +129,6 @@ m = Basemap(llcrnrlon = minlon, llcrnrlat = minlat, urcrnrlon = maxlon, urcrnrla
 m.drawmapboundary(fill_color = 'lightblue')
 m.fillcontinents(color = 'green', lake_color = 'lightblue', zorder=1)  
 
-
 #m.arcgisimage(service='ESRI_Imagery_World_2D', xpixels = 2000, verbose= True)
 # coastline and panels values XB and YB
 
@@ -151,69 +150,31 @@ YB = coordinates[:, 1]
 #YB = np.insert(YB, 229, YB[249])
 
 XC, YC = FlowBoundary.control_points(XB,YB)
-#TODO: check delta angle. Not used in program! Necessary?
-# tweakable parameters!
-
-Vinf = 0.1
-AoA = np.radians(10)#np.arctan((trond_lat -  df_ToTrondheim['Latitude'][0])/(trond_lon - df_ToTrondheim['Longitude'][0]))
-panels, phi = FlowBoundary.panels(XB, YB)
-delta, beta = FlowBoundary.angles(phi, AoA)
-
-# convert to cartesian for avoiding numerical errors?
-#XB, YB = convert.tocartesian(YB)
-#XC, YC = convert.tocartesian(YC)
-
-# solving system of equations
-I, J = sourcepanel.solveGeometricIntegrals(XC, YC, panels, phi, beta, XB, YB)
-np.fill_diagonal(I, np.pi)
-b = -2*np.pi*Vinf*np.cos(beta)
-lamda = linalg.solve(I, b)
 
 # grid for flow computations
-nxx, nyy = 40, 40
-
-# cart rep
-#x_flow = np.linspace(minx, maxx, nxx)
-#y_flow = np.linspace(miny, maxy, nyy)
-#X, Y = np.meshgrid(x_flow, y_flow)
+nxx, nyy = 50, 50
 
 # lon and lat rep
 x_flow = np.linspace(minlon, maxlon, nxx)
 y_flow = np.linspace(minlat, maxlat, nyy)
 X, Y = np.meshgrid(x_flow, y_flow)
 
+# Vinf and AoA are adjustable parameters
+Vinf = 0.01
+AoA = np.radians(-90)#np.arctan((trond_lat -  df_ToTrondheim['Latitude'][0])/(trond_lon - df_ToTrondheim['Longitude'][0]))
+panels, phi = FlowBoundary.panels(XB, YB)
+delta, beta = FlowBoundary.angles(phi, AoA)
+
 # sink located at Trondheim
-lamda_trond = 1        # sink strength
+lamda_trond = 0.01        # sink strength
 trond_flow = Flow.Velocity(lamda_trond, trond_lon, trond_lat)
 vx_sink, vy_sink = trond_flow.sink(X, Y)
 
-#source located at edge of map upper left
-source_bound = 2
-source_flow = Flow.Velocity(source_bound, df_route['Longitude'][0], df_route['Latitude'][0])
-vx_source, vy_source = source_flow.source(X, Y)
-
-#source_bound1 = 2
-#source_flow1 = Flow.Velocity(source_bound1, maxlon, maxlat)
-#vx_source1, vy_source1 = source_flow1.source(X, Y)
-#
-#source_bound2 = 2
-#source_flow2 = Flow.Velocity(source_bound2, 8.88112, 63.4482)
-#vx_source2, vy_source2 = source_flow2.source(X, Y)
-
-#source_bound3 = 10
-#source_flow3 = Flow.Velocity(source_bound3, 9.43876, 64.0045)
-#vx_source3, vy_source3 = source_flow3.source(X, Y)
-
-# exclude land areas
-#land_vals = find_land.arr(x_flow, y_flow, m)
-#land_vals = np.rot90(land_vals)
-#sea_vals = 1 - land_vals 
-#Y = np.flip(Y, axis = 0)
-
-# XP and YP
-# TODO: Try to only calculate in for loops. minimize if checks and decrease computation time. 
-#X_sea = X*sea_vals
-#Y_sea = Y*sea_vals
+# solving system of equations
+I = sourcepanel.solveGeometricIntegrals(XC, YC, panels, phi, beta, XB, YB)
+np.fill_diagonal(I, np.pi)
+b = -2*np.pi*Vinf*np.cos(beta) 
+lamda = np.linalg.solve(I, b)
 
 vx = np.zeros((nxx, nyy))
 vy = np.zeros((nxx, nyy))
@@ -226,25 +187,25 @@ for i in range(nxx):
             vx[i, j] = 0 
             vy[i, j] = 0
         else:
-            #if X[i,j] > trond_lon:
+             #if X[i,j] > trond_lon:
             #    Vinf = -1
             #else: 
             #    Vinf = 2
-            vx[i, j] = Vinf*np.cos(AoA) + np.dot(lamda, XGeom.T/(2*np.pi)) + vx_sink[i, j]+ vx_source[i, j]  #+ np.sum(lamda*XGeom/(2*np.pi)) #np.dot(lamda, XGeom.T)/(2*np.pi) + vx_sink[i, j] #+ vx_source2[i,j] + vx_source1[i, j]  
-            vy[i, j] = Vinf*np.sin(AoA) + np.dot(lamda, YGeom.T/(2*np.pi)) + vy_sink[i, j]+ vy_source[i, j]  #+ np.sum(lamda*YGeom/(2*np.pi)) #  #+ vy_source2[i,j] + vy_source1[i, j]  
+            vx[i, j] = Vinf*np.cos(AoA) + np.dot(lamda, XGeom.T/(2*np.pi)) + vx_sink[i, j] #+ vx_source[i, j]  #+ np.sum(lamda*XGeom/(2*np.pi)) #np.dot(lamda, XGeom.T)/(2*np.pi) + vx_sink[i, j] #+ vx_source2[i,j] + vx_source1[i, j]  
+            vy[i, j] = Vinf*np.sin(AoA) + np.dot(lamda, YGeom.T/(2*np.pi)) + vy_sink[i, j] #+ vy_source[i, j]  #+ np.sum(lamda*YGeom/(2*np.pi)) #  #+ vy_source2[i,j] + vy_source1[i, j]  
 
 # create color plot for unique routes 
-#for i in range(len(unique_tugroutes.values)):
-#    routes = df_ToTrondheim.loc[df_ToTrondheim['Route number'] == i, 
-#        ['Longitude', 'Latitude', 'VelocityLongitude', 'VelocityLatitude']]
-#
-#    m.quiver(routes['Longitude'], routes['Latitude'], 
-#             routes['VelocityLongitude'], routes['VelocityLatitude'], 
-#             scale = 700, color='C%d' % i)
+for i in range(len(unique_tugroutes.values)):
+    routes = df_ToTrondheim.loc[df_ToTrondheim['Route number'] == i, 
+        ['Longitude', 'Latitude', 'VelocityLongitude', 'VelocityLatitude']]
+
+    m.quiver(routes['Longitude'], routes['Latitude'], 
+             routes['VelocityLongitude'], routes['VelocityLatitude'], 
+             scale = 700, color='C%d' % i)
 
 # single route
-m.quiver(df_route['Longitude'], df_route['Latitude'],
-         df_route['VelocityLongitude'], df_route['VelocityLatitude'], scale = 800)
+#m.quiver(df_route['Longitude'], df_route['Latitude'],
+#         df_route['VelocityLongitude'], df_route['VelocityLatitude'], scale = 800)
 
 #plt.plot(df_route['Longitude'], df_route['Latitude'])
 # plot tugboats     
@@ -266,8 +227,8 @@ m.quiver(df_route['Longitude'], df_route['Latitude'],
 #X_initpoints = np.linspace(x_flow[0], x_flow[-1], nxx)
 #Y_initpoints = y_flow[-1]*np.ones(len(X_initpoints))                            
 #XY_init = np.vstack((X_initpoints.T, Y_initpoints.T)).T  
-stream = plt.streamplot(X[1: -1, 1: -1], Y[1: -1, 1: -1], vx[1: -1, 1: -1], vy[1: -1, 1: -1],
-                        linewidth = 0.75, density = 4, color = 'C0', arrowstyle = '->')
+#stream = plt.streamplot(X[1: -1, 1: -1], Y[1: -1, 1: -1], vx[1: -1, 1: -1], vy[1: -1, 1: -1],
+#                        linewidth = 0.75, density = 4, color = 'C0', arrowstyle = '->')
 
 #  labels = [left,right,top,bottom]
 m.drawparallels(lat_bins, labels = [False, True, True, False])
@@ -278,21 +239,21 @@ trond_x, trond_y = m(trond_lon, trond_lat)
 labels = ['Trondheim']
 
 # get streamline points
-path = stream.lines.get_paths()
-path = np.asarray(path)
-segment = stream.lines.get_segments()
-segment = np.asarray(segment)
-val = 10
+#path = stream.lines.get_paths()
+#path = np.asarray(path)
+#segment = stream.lines.get_segments()
+#segment = np.asarray(segment)
+#val = 10
 
 # finding starting point of streamline
-for i in range(segment.shape[0]):    
-    dist = np.sqrt((df_route['Longitude'][0] - segment[i, 0, 0])**2 + (df_route['Latitude'][0] - segment[i, 1, 1])**2)
-    if dist < val:
-        val = dist
-        arg = i
+#for i in range(segment.shape[0]):    
+#    dist = np.sqrt((df_route['Longitude'][0] - segment[i, 0, 0])**2 + (df_route['Latitude'][0] - segment[i, 1, 1])**2)
+#    if dist < val:
+#        val = dist
+#        arg = i
 
-stream_len = 100
-m.plot(segment[arg + 18: arg + stream_len, 0, 0], segment[arg + 18:arg + stream_len, 1, 1], color='red')
+#stream_len = 100
+#m.plot(segment[arg + 18: arg + stream_len, 0, 0], segment[arg + 18:arg + stream_len, 1, 1], color='red')
 
 m.plot(trond_x, trond_y, color = 'orange', marker = 's', markersize = 4)
 for label, xpt, ypt in zip(labels, trond_x, trond_y):

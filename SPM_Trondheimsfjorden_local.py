@@ -108,7 +108,7 @@ maxlat = min(90, max(df_route['Latitude']))
 nx, ny = 3, 3
 #minx, miny = convert.tocartesian(minlat)
 #maxx, maxy = convert.tocartesian(maxlat)
-
+ 
 lat0 = (maxlat + minlat)/2 
 lon0 = (maxlon + minlon)/2
 lat1 = (maxlat + minlat)/2-20
@@ -122,12 +122,11 @@ lon_trond = 10.39506
 # use merc or cyl projection types!
 # create map instance
 m = Basemap(llcrnrlon = minlon, llcrnrlat = minlat, urcrnrlon = maxlon, urcrnrlat = maxlat,
-            resolution = 'i', projection = 'cyl', lon_0 = lon0, lat_0 = lat0)
-
+            resolution = 'f', projection = 'cyl', lon_0 = lon0, lat_0 = lat0)
+ 
 # formatting plot
 m.drawmapboundary(fill_color = 'lightblue')
 m.fillcontinents(color = 'green', lake_color = 'lightblue', zorder=1)  
-#m.arcgisimage(service='ESRI_Imagery_World_2D', xpixels = 2000, verbose= True)
 # coastline and panels values XB and YB
 
 # maybe change coordinate orientation?!?!
@@ -143,13 +142,13 @@ XC, YC = FlowBoundary.control_points(XB,YB)
 #TODO: check delta angle. Not used in program! Necessary?
 # tweakable parameters!
 
-Vinf = -0.2
-AoA = np.pi/2 #np.arctan((trond_lat -  df_route['Latitude'][0])/(trond_lon - df_route['Longitude'][0]))
+Vinf = -1
+AoA = np.arctan((trond_lat -  df_route['Latitude'][0])/(trond_lon - df_route['Longitude'][0]))
 panels, phi = FlowBoundary.panels(XB, YB)
 delta, beta = FlowBoundary.angles(phi, AoA)
 
 # solving system of equations
-I, J = sourcepanel.solveGeometricIntegrals(XC, YC, panels, phi, beta, XB, YB)
+I = sourcepanel.solveGeometricIntegrals(XC, YC, panels, phi, beta, XB, YB)
 np.fill_diagonal(I, np.pi)
 b = -2*np.pi*Vinf*np.cos(beta)
 lamda = linalg.solve(I, b)
