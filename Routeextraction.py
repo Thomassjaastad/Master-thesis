@@ -6,8 +6,10 @@ import sourcepanel
 import sourcepoint
 import FlowBoundary
 import Flow
+#import find_land
 import sys
 import convert
+#from scipy import linalg
 
 np.set_printoptions(threshold=sys.maxsize)
 
@@ -17,16 +19,6 @@ df = df.drop(columns=['dummy'])
 trond_lat = [63.43049]
 trond_lon = [10.39506]
 
-trond_x, trond_y = convert.tocartesian(trond_lat)
-
-df['x'], df['y'] = convert.tocartesian(df['Latitude'])
-
-lonconv, latconv = convert.tolonlat(df['x'], df['y'], df['Latitude'])
-
-lats = df['Latitude'].values
-x, y = convert.tocartesian(lats)
-lon, lat = convert.tolonlat(x, y, lats) 
-
 # add columns to df
 df['Heading'] = np.radians(df['Heading'])
 df['VelocityLongitude'] = df['SpeedOverGround']*np.sin(df['Heading'])
@@ -35,7 +27,6 @@ df['DistTrondheimHaversine'] = convert.distsphere(df['Longitude'], trond_lon, df
 
 print('Ship types in data set:')
 print(df['ShipType'].drop_duplicates())
-
 
 # extract subset of original df to analyze. Dataset to big to analyze all together
 df_subset = df[df['ShipType'].isin(['tugboats'])].copy()
@@ -115,70 +106,15 @@ m = Basemap(llcrnrlon = minlon, llcrnrlat = minlat, urcrnrlon = maxlon, urcrnrla
 m.drawmapboundary(fill_color = 'lightblue')
 m.fillcontinents(color = 'green', lake_color = 'lightblue', zorder=1)  
 
-# coastline and panels values XB and YB
+# create color plot for unique routes 
+for i in range(len(unique_tugroutes.values)):
+    routes = df_ToTrondheim.loc[df_ToTrondheim['Route number'] == i, 
+        ['Longitude', 'Latitude', 'VelocityLongitude', 'VelocityLatitude']]
 
-# maybe change coordinate orientation?!?!
-coast = m.drawcoastlines()
-coordinates = coast.get_segments() 
-coordinates = np.vstack(coordinates)
+    m.quiver(routes['Longitude'], routes['Latitude'], 
+             routes['VelocityLongitude'], routes['VelocityLatitude'], 
+             scale = 700, color='C%d' % i)
 
-# boundary points in lon and lat degree values!
-XB = coordinates[:, 0]
-YB = coordinates[:, 1]
-#y_argmax = np.argmax(YB)
-
-# Unwanted boundary points need to be removed from array
-# 228 idx is the top left boundary point
-XB = np.insert(XB, 228, minlon)
-YB = np.insert(YB, 228, maxlat)
-
-XB = np.insert(XB, 229, XB[249])
-YB = np.insert(YB, 229, YB[249])
-
-XC, YC = FlowBoundary.control_points(XB,YB)
-
-# grid for flow computations
-nxx, nyy = 50, 50
-
-# lon and lat rep
-x_flow = np.linspace(minlon, maxlon, nxx)
-y_flow = np.linspace(minlat, maxlat, nyy)
-X, Y = np.meshgrid(x_flow, y_flow)
-
-# Vinf and AoA are adjustable parameters
-Vinf = 0.01
-AoA = np.radians(-90)#np.arctan((trond_lat -  df_ToTrondheim['Latitude'][0])/(trond_lon - df_ToTrondheim['Longitude'][0]))
-panels, phi = FlowBoundary.panels(XB, YB)
-delta, beta = FlowBoundary.angles(phi, AoA)
-
-# sink located at Trondheim
-lamda_trond = 0.01        # sink strength
-trond_flow = Flow.Velocity(lamda_trond, trond_lon, trond_lat)
-vx_sink, vy_sink = trond_flow.sink(X, Y)
-
-# solving system of equations
-I = sourcepanel.solveGeometricIntegrals(XC, YC, panels, phi, beta, XB, YB)
-np.fill_diagonal(I, np.pi)
-b = -2*np.pi*Vinf*np.cos(beta) 
-lamda = np.linalg.solve(I, b)
-
-vx = np.zeros((nxx, nyy))
-vy = np.zeros((nxx, nyy))
-
-# compute velocites at every grid cell (XP, YP)
-for i in range(nxx):
-    for j in range(nyy):
-        XGeom, YGeom = sourcepoint.solvePointGeometry(X[i,j], Y[i,j], panels, phi, XB, YB)
-        if m.is_land(X[i,j], Y[i,j]) == True:
-            vx[i, j] = 0 
-            vy[i, j] = 0
-        else:
-            vx[i, j] = Vinf*np.cos(AoA) + np.dot(lamda, XGeom.T/(2*np.pi)) + vx_sink[i, j]   
-            vy[i, j] = Vinf*np.sin(AoA) + np.dot(lamda, YGeom.T/(2*np.pi)) + vy_sink[i, j]   
-
-
-stream = plt.streamplot(X[1: -1, 1: -1], Y[1: -1, 1: -1], vx[1: -1, 1: -1], vy[1: -1, 1: -1],
-                        linewidth = 0.75, density = 4, color = 'C0', arrowstyle = '->')
 
 #  labels = [left,right,top,bottom]
 m.drawparallels(lat_bins, labels = [False, True, True, False])

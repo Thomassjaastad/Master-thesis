@@ -6,7 +6,6 @@ import sourcepanel
 import sourcepoint
 import FlowBoundary
 import Flow
-import find_land
 import sys
 import convert
 from scipy import linalg
@@ -19,25 +18,10 @@ df = df.drop(columns=['dummy'])
 trond_lat = 63.43049
 trond_lon = 10.39506
 
-#trond_x, trond_y = convert.tocartesian(trond_lat)
-
-df['x'], df['y'] = convert.tocartesian(df['Latitude'])
-
-lonconv, latconv = convert.tolonlat(df['x'], df['y'], df['Latitude'])
-
-
-#print(df['Longitude'].head(), df['Latitude'].head(), df['x'].head(), df['y'].head())
-
-lats = df['Latitude'].values
-x, y = convert.tocartesian(lats)
-lon, lat = convert.tolonlat(x, y, lats) 
-
 # add columns to df
 df['Heading'] = np.radians(df['Heading'])
 df['VelocityLongitude'] = df['SpeedOverGround']*np.sin(df['Heading'])
 df['VelocityLatitude'] = df['SpeedOverGround']*np.cos(df['Heading'])
-#df['DistTrondheimCart'] = np.sqrt((df['x'].values - trond_x)**2 + (df['y'].values - trond_y)**2)
-#df['DistTrondheimWGS'] = np.sqrt((df['Longitude'].values - trond_lon)**2 + (df['Latitude'].values - trond_lat)**2)
 df['DistTrondheimHaversine'] = convert.distsphere(df['Longitude'], trond_lon, df['Latitude'], trond_lat)
 
 # extract subset of original df to analyze. Dataset to big to analyze all together
@@ -46,9 +30,6 @@ df_subset = df[df['ShipType'].isin(['tugboats'])].copy()
 # get rid of hours, minutes and seconds in Timestamp col/idx
 date = df_subset.index.to_period('d')
 unique_dates = date.drop_duplicates()
-
-#route0 = df_subset.loc[str(unique_dates[0])]
-#route1 = df_subset.loc[str(unique_dates[1])]
 
 date_freq = date.value_counts()
 # find routes sorting by unique dates. Add new column to df_subset determining travelling direction
@@ -106,8 +87,6 @@ maxlon = min(180, max(df_route['Longitude']))
 maxlat = min(90, max(df_route['Latitude']))
 
 nx, ny = 3, 3
-#minx, miny = convert.tocartesian(minlat)
-#maxx, maxy = convert.tocartesian(maxlat)
  
 lat0 = (maxlat + minlat)/2 
 lon0 = (maxlon + minlon)/2
@@ -122,7 +101,7 @@ lon_trond = 10.39506
 # use merc or cyl projection types!
 # create map instance
 m = Basemap(llcrnrlon = minlon, llcrnrlat = minlat, urcrnrlon = maxlon, urcrnrlat = maxlat,
-            resolution = 'f', projection = 'cyl', lon_0 = lon0, lat_0 = lat0)
+            resolution = 'i', projection = 'cyl', lon_0 = lon0, lat_0 = lat0)
  
 # formatting plot
 m.drawmapboundary(fill_color = 'lightblue')
